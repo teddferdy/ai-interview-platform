@@ -29,7 +29,10 @@ describe("portfoliosApi", () => {
 
   it("getFitGap surfaces the generating envelope (202) — client must NOT treat it as an error", async () => {
     (api.get as any).mockResolvedValue({
-      data: { status: "generating", message: "Fit/gap report generation queued" },
+      data: {
+        status: "generating",
+        message: "Fit/gap report generation queued",
+      },
     });
 
     const res = await portfoliosApi.getFitGap(1, 2);
@@ -39,10 +42,18 @@ describe("portfoliosApi", () => {
   });
 
   it("getOverride posts to the skill-specific override endpoint", async () => {
-    const override = { id: 5, portfolio_skill_id: 7, override_level: 3, assessor_notes: "ok" };
+    const override = {
+      id: 5,
+      portfolio_skill_id: 7,
+      override_level: 3,
+      assessor_notes: "ok",
+    };
     (api.post as any).mockResolvedValue({ data: { override } });
 
-    const res = await portfoliosApi.getOverride(7, { override_level: 3, assessor_notes: "ok" });
+    const res = await portfoliosApi.getOverride(7, {
+      override_level: 3,
+      assessor_notes: "ok",
+    });
 
     expect(api.post).toHaveBeenCalledWith("/portfolio_skills/7/override", {
       override: { override_level: 3, assessor_notes: "ok" },

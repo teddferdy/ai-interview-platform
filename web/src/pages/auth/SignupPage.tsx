@@ -21,7 +21,9 @@ export default function SignupPage() {
       await authApi.signup({ email, password });
       navigate("/login", { state: { signedUp: true } });
     } catch (err: any) {
-      setError(err?.response?.data?.message ?? "Signup failed. Please try again.");
+      setError(
+        err?.response?.data?.message ?? "Signup failed. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -32,7 +34,9 @@ export default function SignupPage() {
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <h1 className="text-2xl font-bold">AI Interview</h1>
-          <p className="text-sm text-muted-foreground mt-1">Create an account</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Create an account
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

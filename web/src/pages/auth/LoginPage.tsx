@@ -70,13 +70,13 @@ export default function LoginPage() {
             />
           </div>
 
-        {signedUp && (
-          <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
-            Account created. Please sign in.
-          </div>
-        )}
+          {signedUp && (
+            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
+              Account created. Please sign in.
+            </div>
+          )}
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

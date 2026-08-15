@@ -25,15 +25,17 @@ describe("testInternetSpeed", () => {
   });
 
   it("uploads to the backend's own /speed_test endpoint (no external host)", async () => {
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (init && init.method === "POST") return okResponse();
-      return okResponse();
-    });
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init && init.method === "POST") return okResponse();
+        return okResponse();
+      },
+    );
 
     const result = await testInternetSpeed();
 
     const postCall = fetchMock.mock.calls.find(
-      ([input, init]) => init && (init as RequestInit).method === "POST"
+      ([input, init]) => init && (init as RequestInit).method === "POST",
     );
     expect(postCall).toBeDefined();
     expect(String(postCall![0])).toBe(EXPECTED_UPLOAD_URL);
@@ -44,10 +46,12 @@ describe("testInternetSpeed", () => {
     // Old behaviour: 503/404 still resolved fetch and was measured as an
     // instant (fake) fast upload. Now every non-2xx run contributes 0, so a
     // flaky/offline endpoint can never produce a passing upload number.
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (init && init.method === "POST") return errorResponse();
-      return okResponse();
-    });
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init && init.method === "POST") return errorResponse();
+        return okResponse();
+      },
+    );
 
     const result = await testInternetSpeed();
 
@@ -68,10 +72,12 @@ describe("testInternetSpeed", () => {
   });
 
   it("passes only when all thresholds are met", async () => {
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (init && init.method === "POST") return okResponse();
-      return okResponse();
-    });
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init && init.method === "POST") return okResponse();
+        return okResponse();
+      },
+    );
 
     const result = await testInternetSpeed({
       minDownloadMbps: 0,

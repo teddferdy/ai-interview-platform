@@ -33,8 +33,15 @@ describe("OverridePanel", () => {
     const onSaved = vi.fn();
     const onStale = vi.fn();
 
-    const override = { id: 5, portfolio_skill_id: 7, override_level: 3, assessor_notes: "notes" };
-    (portfoliosApi.getOverride as any).mockResolvedValue({ data: { override } });
+    const override = {
+      id: 5,
+      portfolio_skill_id: 7,
+      override_level: 3,
+      assessor_notes: "notes",
+    };
+    (portfoliosApi.getOverride as any).mockResolvedValue({
+      data: { override },
+    });
 
     render(<OverridePanel skill={skill} onSaved={onSaved} onStale={onStale} />);
 
@@ -78,7 +85,9 @@ describe("OverridePanel", () => {
     await user.click(screen.getByRole("button", { name: /Override rating/i }));
     await user.click(screen.getByRole("button", { name: /Save override/i }));
 
-    await waitFor(() => expect(screen.getByText(/Failed to save override/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/Failed to save override/i)).toBeInTheDocument(),
+    );
     expect(onStale).not.toHaveBeenCalled();
   });
 });
