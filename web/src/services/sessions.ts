@@ -31,4 +31,7 @@ export const sessionsApi = {
 
   audioComplete: (token: string) =>
     api.post<{ ended: boolean; message: string }>(`/sessions/${token}/audio_complete`),
+
+  candidateEnd: (token: string) =>
+    api.post<{ ended: boolean; message: string }>(`/sessions/${token}/end`),
 };

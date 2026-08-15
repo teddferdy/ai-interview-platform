@@ -1,4 +1,6 @@
-// Internet Speed Test Utilities — standalone, no backend dependency
+// Internet Speed Test Utilities — upload measurement uses the backend's
+// own speed_test endpoint; other checks are standalone.
+import { BASE_URL } from "@/services/api";
 
 export interface InternetSpeedResult {
     download: number;
@@ -39,6 +41,7 @@ async function measurePing(): Promise<number> {
         "https://www.google.com/favicon.ico",
         "https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js",
         "https://unpkg.com/react@18/umd/react.production.min.js",
+        "http://localhost:5174/"
     ];
     for (const url of testUrls) {
         try {
@@ -87,22 +90,28 @@ async function measureUploadSpeed(): Promise<number> {
     const uploadData = new Blob([new ArrayBuffer(uploadSizeMB * 1024 * 1024)], {
         type: "application/octet-stream",
     });
+    // Default to the backend's own speed_test endpoint (discards the payload
+    // and returns bytes received) — external echo services like httpbin.org
+    // are flaky (503/429) and add a dependency on a third-party host.
     const endpoints = SPEED_TEST_UPLOAD_URL
         ? [SPEED_TEST_UPLOAD_URL]
-        : ["https://httpbin.org/post", "https://www.httpbin.org/post", "https://postman-echo.com/post"];
+        : [`${BASE_URL}/speed_test`];
     for (const endpoint of endpoints) {
         try {
             const formData = new FormData();
             formData.append("test", uploadData);
             const start = performance.now();
-            await fetch(endpoint, { method: "POST", body: formData });
+            const response = await fetch(endpoint, { method: "POST", body: formData });
+            // A 503/404 still resolves fetch — only count 2xx as a valid test,
+            // otherwise a failed endpoint is measured as a (fake) fast upload.
+            if (!response.ok) continue;
             const seconds = (performance.now() - start) / 1000;
             return uploadSizeMB / seconds;
         } catch {
             continue;
         }
     }
-    return 0.5; // conservative fallback
+    return 0; // honest failure — no endpoint confirmed the upload
 }
 
 async function runMultipleTests<T>(testFn: () => Promise<T>, count = 3): Promise<T[]> {

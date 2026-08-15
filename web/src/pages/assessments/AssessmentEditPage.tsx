@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import {
@@ -41,6 +41,8 @@ export default function AssessmentEditPage() {
     defaultValues: { name: "", time_limit_min: 45, skills: [] },
   });
 
+  const originalSkillsRef = useRef<Partial<AssessmentSkill>[]>([]);
+
   const { register, handleSubmit, control, setValue, reset, formState: { errors } } = form;
   const { fields, append, remove, move } = useFieldArray({ control, name: "skills" });
 
@@ -49,6 +51,7 @@ export default function AssessmentEditPage() {
       .get(Number(id))
       .then((res) => {
         const a = res.data.assessment;
+        originalSkillsRef.current = a.skills ?? [];
         reset({ name: a.name, time_limit_min: a.time_limit_min, skills: a.skills });
       })
       .catch(() => {})
@@ -74,10 +77,18 @@ export default function AssessmentEditPage() {
     setError(null);
     setSubmitting(true);
     try {
+      // useFieldArray.remove() drops removed skills entirely, but existing
+      // records must be sent with _destroy: true or the backend keeps them.
+      const removed = originalSkillsRef.current
+        .filter((orig) => orig.id && !data.skills.some((s) => s.id === orig.id))
+        .map((orig) => ({ id: orig.id, _destroy: true }));
       await assessmentsApi.update(Number(id), {
         name: data.name,
         time_limit_min: data.time_limit_min,
-        assessment_skills_attributes: data.skills.map((s, i) => ({ ...s, display_order: i })),
+        assessment_skills_attributes: [
+          ...data.skills.map((s, i) => ({ ...s, display_order: i })),
+          ...removed,
+        ],
       });
       navigate(`/assessments/${id}/invite`);
     } catch (e: any) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -32,9 +32,12 @@ export default function VacancyEditPage() {
   });
   const { fields, append, remove } = useFieldArray({ control, name: "skills" });
 
+  const originalSkillsRef = useRef<Partial<VacancySkill>[]>([]);
+
   useEffect(() => {
     vacanciesApi.get(Number(id)).then((res) => {
       const v = res.data.vacancy;
+      originalSkillsRef.current = v.skills;
       reset({ role_title: v.role_title, culture_dimensions: v.culture_dimensions, competency_expectations: v.competency_expectations, skills: v.skills });
     }).catch(() => {}).finally(() => setLoading(false));
   }, [id, reset]);
@@ -42,11 +45,16 @@ export default function VacancyEditPage() {
   const onSubmit = async (data: VacancyFormValues) => {
     setSubmitting(true);
     try {
+      // useFieldArray.remove() drops removed skills entirely, but existing
+      // records must be sent with _destroy: true or the backend keeps them.
+      const removed = originalSkillsRef.current
+        .filter((orig) => orig.id && !data.skills.some((s) => s.id === orig.id))
+        .map((orig) => ({ id: orig.id, _destroy: true }));
       await vacanciesApi.update(Number(id), {
         role_title: data.role_title,
         culture_dimensions: data.culture_dimensions,
         competency_expectations: data.competency_expectations,
-        vacancy_skills_attributes: data.skills,
+        vacancy_skills_attributes: [...data.skills, ...removed],
       });
       navigate("/vacancies");
     } finally {
