@@ -21,7 +21,7 @@ import { useAudioPlayback } from "@/hooks/useAudioPlayback";
 import { useAudioWebSocket } from "@/hooks/useAudioWebSocket";
 import { sessionsApi } from "@/services/sessions";
 import HardwareCheck from "@/components/HardwareCheck";
-import { CheckCircle, Mic, MicOff } from "lucide-react";
+import { AlertTriangle, CheckCircle, Mic, MicOff } from "lucide-react";
 import type { CandidateInfo, InterviewState, InterviewSpeaker, TranscriptTurn } from "@/types";
 
 export default function InterviewPage() {
@@ -38,24 +38,66 @@ export default function InterviewPage() {
   const connectionLostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [micMuted, setMicMuted] = useState(false);
   const micMutedRef = useRef(false);
+  const [interviewError, setInterviewError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const interviewStateRef = useRef<InterviewState>("idle");
+  interviewStateRef.current = interviewState;
+  const retryActionRef = useRef<(() => void) | null>(null);
+  const startInterviewRef = useRef<(() => void) | null>(null);
+  const endInterviewRef = useRef<() => void>(() => {});
+  const stopCaptureRef = useRef<() => void>(() => {});
+
+  const showError = useCallback((message: string, retry?: () => void) => {
+    retryActionRef.current = retry ?? null;
+    setInterviewError(message);
+    setInterviewState("error");
+  }, []);
 
   // Fetch candidate info
   useEffect(() => {
     if (!token) return;
+    let cancelled = false;
+    setInterviewState("idle");
     sessionsApi.getCandidateInfo(token)
       .then((res) => {
+        if (cancelled) return;
         setCandidateInfo(res.data);
         setSessionId(res.data.session_id);
         if (res.data.session_status === "ended") setInterviewState("complete");
       })
-      .catch(() => setInterviewState("complete"));
-  }, [token]);
+      .catch(() => {
+        if (cancelled) return;
+        setCandidateInfo(null);
+        setSessionId(null);
+        showError(
+          "We couldn't load your interview. Check your connection and try again.",
+          () => setReloadKey((k) => k + 1)
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, reloadKey, showError]);
 
   const muteRef = useRef<(() => void) | null>(null);
   const unmuteRef = useRef<(() => void) | null>(null);
 
   const handleStateChange = useCallback((state: InterviewState) => {
     setInterviewState(state);
+
+    if (state === "error") {
+      stopCaptureRef.current?.();
+      if (connectionLostTimerRef.current) {
+        clearTimeout(connectionLostTimerRef.current);
+        connectionLostTimerRef.current = null;
+      }
+      setConnectionLostLong(false);
+      showError(
+        "The connection was lost and couldn't be restored. Check your internet and try again.",
+        () => startInterviewRef.current?.()
+      );
+      return;
+    }
 
     if (state === "draining_audio") {
       // Mute mic, stop sending — wait for audio queue to drain then call audio_complete
@@ -82,7 +124,7 @@ export default function InterviewPage() {
       setConnectionLostLong(false);
       if (state === "active" && !micMutedRef.current) unmuteRef.current?.();
     }
-  }, []);
+  }, [showError]);
 
   const handleReconnected = useCallback(() => {
     if (reconnectedPromptTimerRef.current) clearTimeout(reconnectedPromptTimerRef.current);
@@ -142,7 +184,15 @@ export default function InterviewPage() {
 
   const { start: startCapture, stop: stopCapture, mute, unmute } = useAudioCapture({
     onFrame: send,
+    onError: () => {
+      showError(
+        "Microphone access failed. Allow mic access in your browser, then try again.",
+        () => startInterviewRef.current?.()
+      );
+    },
   });
+
+  stopCaptureRef.current = stopCapture;
 
   muteRef.current = mute;
   unmuteRef.current = unmute;
@@ -160,7 +210,11 @@ export default function InterviewPage() {
   }, [mute, unmute]);
 
   const startInterview = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      showError("The interview session isn't ready. Please reload the page to try again.");
+      return;
+    }
+    retryActionRef.current = startInterview;
     setInterviewState("connecting");
     connect();
     await startCapture();
@@ -168,17 +222,32 @@ export default function InterviewPage() {
     // This prevents mic audio from being sent during AI speech, since separate
     // AudioContexts for capture/playback break the browser's echo cancellation.
     muteRef.current?.();
-  }, [sessionId, connect, startCapture]);
+  }, [sessionId, connect, startCapture, showError]);
+  startInterviewRef.current = startInterview;
 
   const endInterview = useCallback(async () => {
+    if (interviewStateRef.current === "ending" || !token) return;
     setInterviewState("ending");
     if (reconnectedPromptTimerRef.current) clearTimeout(reconnectedPromptTimerRef.current);
     stopCapture();
     stopPlayback();
+    // Best-effort WS notify — silently dropped if the socket isn't open.
     sendJson({ type: "end_session" });
-    disconnect();
-    setInterviewState("complete");
-  }, [stopCapture, stopPlayback, sendJson, disconnect]);
+    // Authoritative end over HTTP (invite token) — works even when the WS is down.
+    try {
+      await sessionsApi.candidateEnd(token);
+      disconnect();
+      setInterviewState("complete");
+    } catch {
+      disconnect();
+      if (interviewStateRef.current === "complete") return;
+      showError(
+        "We couldn't end the interview. Check your connection and try again.",
+        () => endInterviewRef.current()
+      );
+    }
+  }, [token, stopCapture, stopPlayback, sendJson, disconnect, showError]);
+  endInterviewRef.current = endInterview;
 
   const wsConnectionStatus =
     interviewState === "reconnecting"
@@ -236,6 +305,29 @@ export default function InterviewPage() {
           Thank you. The interview has been recorded.
           <br />
           The hiring team will review your results and follow up with you.
+        </p>
+      </div>
+    );
+  }
+
+  // ── State G: Error ───────────────────────────────────────────────────────
+  if (interviewState === "error") {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-4">
+        <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+          <AlertTriangle className="h-6 w-6 text-destructive" />
+        </div>
+        <h2 className="text-xl font-semibold">Something went wrong</h2>
+        <p className="text-sm text-muted-foreground">
+          {interviewError ?? "An unexpected error occurred. Please try again."}
+        </p>
+        {retryActionRef.current && (
+          <Button size="lg" onClick={() => retryActionRef.current?.()}>
+            Try again
+          </Button>
+        )}
+        <p className="text-xs text-muted-foreground">
+          If this keeps happening, contact the interviewer for help.
         </p>
       </div>
     );

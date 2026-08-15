@@ -12,7 +12,10 @@ interface UseAudioWebSocketOptions {
   onReconnected?: () => void;
 }
 
-const RECONNECT_DELAYS = [1000, 2000, 4000];
+// Cumulative backoff totaling ~120s, matching the backend BROWSER_GRACE_PERIOD:
+// the session stays recoverable server-side for up to 2 minutes after the
+// browser connection drops. Exhausting the list means the session was lost.
+const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 60000];
 
 export function useAudioWebSocket({
   sessionId,
@@ -103,7 +106,7 @@ export function useAudioWebSocket({
               onStateChange("complete");
               break;
             case "error":
-              if (!msg.recoverable) onStateChange("complete");
+              if (!msg.recoverable) onStateChange("error");
               break;
           }
         } catch {
@@ -127,7 +130,7 @@ export function useAudioWebSocket({
           connect();
         }, RECONNECT_DELAYS[attempt]);
       } else {
-        onStateChange("complete");
+        onStateChange("error");
       }
     };
   }, [sessionId, token, onAudioChunk, onTranscript, onStateChange, onSpeakerChange]);
@@ -147,6 +150,7 @@ export function useAudioWebSocket({
   const disconnect = useCallback(() => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     reconnectAttemptsRef.current = RECONNECT_DELAYS.length; // prevent reconnect
+    sessionEndedRef.current = true; // suppress reconnect + state changes on close
     wsRef.current?.close();
   }, []);
 
