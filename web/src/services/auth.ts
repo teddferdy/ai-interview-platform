@@ -13,6 +13,6 @@ export const authApi = {
   login: (data: LoginPayload) =>
     api.post<LoginResponse>("/auth/login", data),
 
-  signup: (data: { email: string; password: string; role: "admin" | "user" }) =>
-    api.post<LoginResponse>("/signup", data),
+  signup: (data: { email: string; password: string }) =>
+    api.post<{ message: string }>("/auth/signup", data),
 };
